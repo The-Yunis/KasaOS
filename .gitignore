@@ -1,0 +1,19 @@
+# build outputs
+build/
+dist/
+release/
+*.spec.bak
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# never commit user data, secrets or keys
+*.db
+*.db-wal
+*.db-shm
+*.kasaosbak
+*.log
+*.pem
+*.key
+.kasaos-signing/
+.env

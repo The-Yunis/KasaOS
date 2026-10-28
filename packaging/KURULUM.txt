@@ -1,0 +1,12 @@
+KasaOS Kurulumu
+===============
+
+1. Bu ZIP dosyasını bir klasöre çıkarın.
+2. install.ps1 dosyasına sağ tıklayın > "PowerShell ile Çalıştır".
+   (Yönetici yetkisi gerekmez. KasaOS, %LOCALAPPDATA%\Programs\KasaOS klasörüne kurulur.)
+3. Masaüstündeki veya Başlat menüsündeki "KasaOS" kısayolu ile uygulamayı açın.
+
+Verileriniz %LOCALAPPDATA%\KasaOS klasöründe saklanır ve kurulum/güncelleme
+sırasında değiştirilmez.
+
+Coded by Yunus Açıkgöz

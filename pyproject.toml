@@ -1,0 +1,18 @@
+[project]
+name = "kasaos"
+version = "1.0.0"
+description = "KasaOS — Yeni Nesil İşletme Yönetimi"
+authors = [{ name = "Yunus Açıkgöz" }]
+requires-python = ">=3.11"
+dependencies = [
+    "PySide6>=6.6",
+    "cryptography>=42",
+    "packaging>=23",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pyinstaller>=6.5"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q -p no:cacheprovider"
