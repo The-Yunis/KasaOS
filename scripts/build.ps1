@@ -21,6 +21,10 @@ if ($LASTEXITCODE -ne 0) { throw "PyInstaller (app) failed" }
 python -m PyInstaller --noconfirm --clean --distpath dist --workpath build/pyi-launcher packaging/kasaos_launcher.spec
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller (launcher) failed" }
 
+# Read the trusted keys / version / update source back out of the built exe (see verify_build.py).
+python scripts/verify_build.py
+if ($LASTEXITCODE -ne 0) { throw "Built executable failed verification; not packaging." }
+
 # The version marker the stager and launcher verify.
 Set-Content -Path "dist/KasaOS-app/kasaos-version.txt" -Value $version -NoNewline -Encoding ascii
 
