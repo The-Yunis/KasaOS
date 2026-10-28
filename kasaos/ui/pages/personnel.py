@@ -46,7 +46,7 @@ def _row(table, values, colors=None):
         if colors and colors.get(c):
             it.setForeground(QColor(colors[c]))
         if c == len(values) - 1:
-            it.setTextAlignment(int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter))
+            it.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         table.setItem(r, c, it)
 
 

@@ -8,7 +8,7 @@ APP_TAGLINE = "Yeni Nesil İşletme Yönetimi"
 APP_SPLASH_TAGLINE = "İşletmenin Kontrol Merkezi"
 DEVELOPER_CREDIT = "Coded by Yunus Açıkgöz"
 
-__version__ = "1.1.0"
+__version__ = "1.1.1"
 
 # Database schema version this build writes. See docs/DATABASE.md.
 SCHEMA_VERSION = 3

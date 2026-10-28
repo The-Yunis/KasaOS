@@ -2,6 +2,11 @@
 
 All notable changes to KasaOS. Versions follow semantic versioning.
 
+## [1.1.1] — 2026-10-28
+
+- Personel listesinde "Durum" sütunu artık kesilmeden görünüyor
+- Yayın öncesi paket doğrulaması eklendi (imza anahtarı, sürüm ve güncelleme kaynağı)
+
 ## [1.1.0] — 2026-10-28
 
 ### Yeni: Personel takibi

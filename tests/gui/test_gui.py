@@ -23,7 +23,24 @@ from kasaos.ui.reference import load_reference  # noqa: E402
 def qapp():
     app = QApplication.instance() or QApplication([])
     app.setStyleSheet(theme.stylesheet())
-    return app
+    yield app
+    # Tear Qt down before the interpreter does: widgets left alive at interpreter exit make
+    # PySide6 abort with 0xC0000409 even though every test passed.
+    from kasaos.ui.workers import wait_for_all
+    wait_for_all(10000)
+    for w in QApplication.topLevelWidgets():
+        w.close()
+        w.deleteLater()
+    QApplication.processEvents()
+
+
+@pytest.fixture(autouse=True)
+def _close_widgets(qapp):
+    yield
+    for w in QApplication.topLevelWidgets():
+        w.close()
+        w.deleteLater()
+    QApplication.processEvents()
 
 
 @pytest.fixture(autouse=True)
