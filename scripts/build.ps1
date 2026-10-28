@@ -26,4 +26,10 @@ Set-Content -Path "dist/KasaOS-app/kasaos-version.txt" -Value $version -NoNewlin
 
 python scripts/package_release.py
 if ($LASTEXITCODE -ne 0) { throw "Release packaging failed" }
+
+# Single-file installer (KasaOS-Kurulum-<ver>.exe) wrapping launcher + app.
+python scripts/make_payload.py
+python -m PyInstaller --noconfirm --clean --distpath dist --workpath build/pyi-setup packaging/kasaos_setup.spec
+if ($LASTEXITCODE -ne 0) { throw "PyInstaller (setup) failed" }
+python scripts/finalize_release.py
 Write-Host "Done. See release/$version"

@@ -6,4 +6,5 @@ may be listed to support key rotation.
 """
 
 TRUSTED_PUBLIC_KEYS: list[str] = [
+    "0G4QLTUsltYXjMy745HO7r3vjPlWKH51MgaJOQKaXSM=",  # release key 1 (2026-10-28)
 ]
