@@ -504,8 +504,7 @@ class PersonnelPage(Page):
         self.list.setRowCount(0)
         for e in shown:
             text, color = _balance_text(e.balance)
-            role = " · ".join(x for x in (e.role, e.wage_text) if x)
-            _row(self.list, [e.name + ("" if e.active else " (ayrıldı)"), role, text], {2: color})
+            _row(self.list, [e.name + ("" if e.active else " (ayrıldı)"), e.role, text], {2: color})
         idx = next((i for i, e in enumerate(shown) if e.id == selected), -1)
         if idx >= 0:
             self.list.selectRow(idx)
