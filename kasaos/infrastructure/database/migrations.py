@@ -155,9 +155,21 @@ def _m2_employees(c: sqlite3.Connection) -> None:
     c.execute("CREATE INDEX ix_emp_entries_tx ON employee_entries(transaction_id)")
 
 
+def _m3_daily_wage(c: sqlite3.Connection) -> None:
+    # Expand-only: defaulted columns, older apps ignore them.
+    c.execute("ALTER TABLE employees ADD COLUMN pay_type TEXT NOT NULL DEFAULT 'monthly' "
+              "CHECK (pay_type IN ('monthly','daily'))")
+    c.execute("ALTER TABLE employees ADD COLUMN daily_wage INTEGER NOT NULL DEFAULT 0 CHECK (daily_wage >= 0)")
+    # Marks an accrual as one worked day (Günlük Yoklama), so a day cannot be counted twice.
+    c.execute("ALTER TABLE employee_entries ADD COLUMN work_day INTEGER NOT NULL DEFAULT 0")
+    c.execute("CREATE INDEX ix_emp_work_day ON employee_entries(occurred_on, employee_id) "
+              "WHERE work_day = 1 AND deleted_at IS NULL")
+
+
 MIGRATIONS: list[Migration] = [
     Migration(1, "İlk şema", _m1_initial, compat_floor=1),
     Migration(2, "Personel takibi", _m2_employees, compat_floor=1),
+    Migration(3, "Günlük ücretli personel", _m3_daily_wage, compat_floor=1),
 ]
 
 

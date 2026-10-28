@@ -7,7 +7,8 @@ from datetime import date
 from PySide6.QtCore import QDate, Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDateEdit, QDialog, QFormLayout, QGridLayout, QHBoxLayout,
-                               QLineEdit, QStackedWidget, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
+                               QLabel, QLineEdit, QStackedWidget, QTableWidget, QTableWidgetItem, QVBoxLayout,
+                               QWidget)
 
 from kasaos.core.exceptions import ValidationError
 from kasaos.domain.entities import Employee
@@ -70,15 +71,22 @@ class EmployeeDialog(QDialog):
         self.role = QLineEdit(emp.role if emp else "")
         self.role.setPlaceholderText("ör. Garson, Nargileci, Kasiyer")
         self.phone = QLineEdit(emp.phone if emp else "")
-        self.salary = QLineEdit(format_amount(emp.monthly_salary, symbol=False) if emp and emp.monthly_salary else "")
-        self.salary.setPlaceholderText("İsteğe bağlı, ör. 25.000,00")
+        self.pay_type = QComboBox()
+        self.pay_type.addItem("Günlük ücret (yevmiye)", "daily")
+        self.pay_type.addItem("Aylık maaş", "monthly")
+        self.pay_type.setCurrentIndex(self.pay_type.findData(emp.pay_type if emp else "daily"))
+        self.salary = QLineEdit()
+        self.salary_label = QLabel()
+        self.pay_type.currentIndexChanged.connect(self._pay_type_changed)
         self.note = QLineEdit(emp.note if emp else "")
         self.active = QCheckBox("Çalışıyor (aktif)")
         self.active.setChecked(emp.active if emp else True)
         form.addRow("Ad soyad", self.name)
         form.addRow("Görev", self.role)
         form.addRow("Telefon", self.phone)
-        form.addRow("Aylık maaş", self.salary)
+        form.addRow("Çalışma şekli", self.pay_type)
+        form.addRow(self.salary_label, self.salary)
+        self._pay_type_changed()
         form.addRow("Not", self.note)
         if emp:
             form.addRow("", self.active)
@@ -97,6 +105,15 @@ class EmployeeDialog(QDialog):
         lay.addLayout(row)
         self.result_employee: Employee | None = None
 
+    def _pay_type_changed(self):
+        daily = self.pay_type.currentData() == "daily"
+        self.salary_label.setText("Günlük ücret" if daily else "Aylık maaş")
+        self.salary.setPlaceholderText("ör. 1.200,00" if daily else "İsteğe bağlı, ör. 25.000,00")
+        value = 0
+        if self.emp:
+            value = self.emp.daily_wage if daily else self.emp.monthly_salary
+        self.salary.setText(format_amount(value, symbol=False) if value else "")
+
     def _ok(self):
         if not self.name.text().strip():
             self.err.setText("Personel adı boş olamaz.")
@@ -108,9 +125,176 @@ class EmployeeDialog(QDialog):
             except ValidationError as e:
                 self.err.setText(str(e))
                 return
-        self.result_employee = Employee(self.emp.id if self.emp else 0, self.name.text(), self.role.text(),
-                                        self.phone.text(), salary, self.note.text(), self.active.isChecked())
+        daily = self.pay_type.currentData() == "daily"
+        if daily and not salary:
+            self.err.setText("Günlük ücreti girin; Günlük Yoklama bu tutarı kullanır.")
+            return
+        keep_monthly = self.emp.monthly_salary if self.emp else 0
+        keep_daily = self.emp.daily_wage if self.emp else 0
+        self.result_employee = Employee(
+            self.emp.id if self.emp else 0, self.name.text(), self.role.text(), self.phone.text(),
+            keep_monthly if daily else salary, self.note.text(), self.active.isChecked(),
+            "daily" if daily else "monthly", salary if daily else keep_daily)
         self.accept()
+
+
+class AttendanceDialog(QDialog):
+    """Günlük Yoklama: tick who worked on a day; accrue (and optionally pay) each daily wage at once."""
+
+    def __init__(self, parent, ctx, employees: list[Employee], methods, worked: set[int], day: date):
+        super().__init__(parent)
+        self.ctx = ctx
+        self._busy = False
+        self.setWindowTitle("Günlük Yoklama")
+        self.setMinimumWidth(640)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(22, 20, 22, 18)
+        lay.setSpacing(10)
+        lay.addWidget(label("Günlük Yoklama", "SectionTitle"))
+        lay.addWidget(label("O gün çalışanları işaretleyin. Yevmiyeleri hak ediş olarak yazılır. Parasını aynı gün "
+                            "alanlar için “Ödendi” işaretlenirse ödeme de kasadan düşülür.", "Muted", wrap=True))
+        top = QHBoxLayout()
+        top.addWidget(label("Tarih"))
+        self.day = QDateEdit(QDate(day.year, day.month, day.day))
+        self.day.setCalendarPopup(True)
+        self.day.setDisplayFormat("dd.MM.yyyy")
+        self.day.dateChanged.connect(self._reload_worked)
+        top.addWidget(self.day)
+        top.addSpacing(16)
+        top.addWidget(label("Ödeme yöntemi"))
+        self.method = QComboBox()
+        for m in methods:
+            self.method.addItem(m.name, m.id)
+        top.addWidget(self.method)
+        top.addStretch(1)
+        lay.addLayout(top)
+
+        self.employees = employees
+        self.table = QTableWidget(len(employees), 4)
+        self.table.setHorizontalHeaderLabels(["Çalıştı", "Personel", "Yevmiye (₺)", "Ödendi"])
+        configure_table(self.table)
+        self.table.horizontalHeader().setSectionResizeMode(1, self.table.horizontalHeader().ResizeMode.Stretch)
+        self.table.setSelectionMode(self.table.SelectionMode.NoSelection)
+        self.checks, self.wages, self.paid = [], [], []
+        for r, e in enumerate(employees):
+            cb = QCheckBox()
+            cb.toggled.connect(self._update_total)
+            wage = QLineEdit(format_amount(e.daily_wage, symbol=False))
+            wage.setAlignment(Qt.AlignmentFlag.AlignRight)
+            wage.textChanged.connect(self._update_total)
+            paid = QCheckBox()
+            paid.toggled.connect(self._update_total)
+            self.table.setCellWidget(r, 0, _centered(cb))
+            self.table.setItem(r, 1, QTableWidgetItem(e.name + (f" · {e.role}" if e.role else "")))
+            self.table.setCellWidget(r, 2, wage)
+            self.table.setCellWidget(r, 3, _centered(paid))
+            self.checks.append(cb)
+            self.wages.append(wage)
+            self.paid.append(paid)
+        self.table.setMinimumHeight(min(420, 60 + 40 * len(employees)))
+        lay.addWidget(self.table)
+        row = QHBoxLayout()
+        all_btn = button("Hepsini işaretle", "Ghost")
+        all_btn.clicked.connect(lambda: [cb.setChecked(True) for cb in self.checks if cb.isEnabled()])
+        row.addWidget(all_btn)
+        row.addStretch(1)
+        self.total = label("", "Muted")
+        row.addWidget(self.total)
+        lay.addLayout(row)
+        self.err = label("", "ErrorText", wrap=True)
+        lay.addWidget(self.err)
+        btns = QHBoxLayout()
+        cancel = button("Vazgeç")
+        cancel.clicked.connect(self.reject)
+        self.ok = button("Yoklamayı Kaydet", "Primary")
+        self.ok.clicked.connect(self._save)
+        btns.addWidget(cancel)
+        btns.addStretch(1)
+        btns.addWidget(self.ok)
+        lay.addLayout(btns)
+        self._apply_worked(worked)
+
+    def _selected_day(self) -> date:
+        q = self.day.date()
+        return date(q.year(), q.month(), q.day())
+
+    def _reload_worked(self, *_):
+        day = self._selected_day()
+        run_async(lambda: self.ctx.employees.worked_on(day), self._apply_worked,
+                  lambda e: show_error(self, "Yoklama yüklenemedi", e), owner=self)
+
+    def _apply_worked(self, worked: set[int]):
+        for r, (e, cb, wage, paid) in enumerate(zip(self.employees, self.checks, self.wages, self.paid)):
+            done = e.id in worked
+            item = self.table.item(r, 1)
+            item.setText(e.name + (f" · {e.role}" if e.role else "") + ("   ✓ bu gün yazıldı" if done else ""))
+            item.setForeground(QColor(theme.TEXT_FAINT if done else theme.TEXT))
+            cb.blockSignals(True)
+            cb.setChecked(done)
+            cb.blockSignals(False)
+            for w in (cb, wage, paid):
+                w.setEnabled(not done)
+            cb.setToolTip("Bu gün için yevmiye zaten yazılmış" if done else "")
+        self._update_total()
+
+    def _rows(self):
+        rows = []
+        for e, cb, wage, paid in zip(self.employees, self.checks, self.wages, self.paid):
+            if cb.isChecked() and cb.isEnabled():
+                rows.append((e, wage.text(), paid.isChecked()))
+        return rows
+
+    def _update_total(self, *_):
+        total = paid_total = 0
+        for _e, text, paid in self._rows():
+            try:
+                v = parse_amount(text)
+            except ValidationError:
+                continue
+            total += v
+            paid_total += v if paid else 0
+        n = len(self._rows())
+        self.total.setText(f"{n} kişi · Yevmiye toplamı {format_amount(total)} · Bugün ödenen {format_amount(paid_total)}")
+
+    def _save(self):
+        if self._busy:
+            return
+        from kasaos.services.employee_service import AttendanceRow
+        rows = []
+        for e, text, paid in self._rows():
+            try:
+                rows.append(AttendanceRow(e.id, parse_amount(text), paid))
+            except ValidationError as err:
+                self.err.setText(f"{e.name}: {err}")
+                return
+        if not rows:
+            self.err.setText("Çalışan en az bir personel işaretleyin.")
+            return
+        day = self._selected_day()
+        method = self.method.currentData()
+        self._busy = True
+        self.ok.setEnabled(False)
+        self.ok.setText("Kaydediliyor…")
+
+        def fail(e):
+            self._busy = False
+            self.ok.setEnabled(True)
+            self.ok.setText("Yoklamayı Kaydet")
+            if isinstance(e, ValidationError):
+                self.err.setText(str(e))
+            else:
+                show_error(self, "Yoklama kaydedilemedi", e)
+        run_async(lambda: self.ctx.employees.record_attendance(day, rows, method), lambda n: self.accept(), fail,
+                  owner=self)
+
+
+def _centered(widget) -> QWidget:
+    w = QWidget()
+    lay = QHBoxLayout(w)
+    lay.setContentsMargins(0, 0, 0, 0)
+    lay.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    lay.addWidget(widget)
+    return w
 
 
 class EntryDialog(QDialog):
@@ -130,8 +314,11 @@ class EntryDialog(QDialog):
         self.amount.setObjectName("AmountEdit")
         self.amount.setPlaceholderText("0,00")
         self.amount.setAlignment(Qt.AlignmentFlag.AlignRight)
-        if kind == EmployeeEntryKind.ACCRUAL and emp.monthly_salary:
-            self.amount.setText(format_amount(emp.monthly_salary, symbol=False))
+        default_accrual = emp.daily_wage if emp.is_daily else emp.monthly_salary
+        if kind == EmployeeEntryKind.ACCRUAL and default_accrual:
+            self.amount.setText(format_amount(default_accrual, symbol=False))
+        if kind == EmployeeEntryKind.PAYMENT and emp.balance > 0:
+            self.amount.setText(format_amount(emp.balance, symbol=False))  # pay what is owed
         if kind == EmployeeEntryKind.REPAYMENT and emp.balance < 0:
             self.amount.setText(format_amount(-emp.balance, symbol=False))
         form.addRow("Tutar (₺)", self.amount)
@@ -200,6 +387,10 @@ class PersonnelPage(Page):
     def __init__(self, window):
         super().__init__(window)
         header = PageHeader("Personel", "Maaş, avans ve personelle olan alacak / borç takibi")
+        self.attendance_btn = button("Günlük Yoklama", "Income", icon="personnel", icon_color=theme.INCOME)
+        self.attendance_btn.setToolTip("Bugün çalışan günlükçülerin yevmiyesini tek seferde yazın")
+        self.attendance_btn.clicked.connect(self._attendance)
+        header.actions.addWidget(self.attendance_btn)
         add = button("+ Personel Ekle", "Primary")
         add.clicked.connect(self._add_employee)
         header.actions.addWidget(add)
@@ -293,11 +484,16 @@ class PersonnelPage(Page):
         if selected is None or all(e.id != selected for e in shown):
             selected = shown[0].id if shown else None
         entries = self.ctx.employees.entries(selected) if selected else []
-        return emps, shown, selected, entries, self.ctx.employees.summary(), self.ctx.catalog.payment_methods()
+        today = date.today()
+        days = self.ctx.employees.worked_days(selected, today.replace(day=1), today) if selected else 0
+        return (emps, shown, selected, entries, self.ctx.employees.summary(), self.ctx.catalog.payment_methods(),
+                days)
 
     def apply(self, d):
-        emps, shown, selected, entries, summary, methods = d
+        emps, shown, selected, entries, summary, methods, days = d
         self._methods = methods
+        self._month_days = days
+        self.attendance_btn.setEnabled(any(e.active and e.is_daily for e in emps))
         self.c_owed.set_amount(summary.owed_to_staff)
         self.c_due.set_amount(summary.owed_by_staff)
         self.c_count.value.setText(str(summary.active_count))
@@ -308,7 +504,8 @@ class PersonnelPage(Page):
         self.list.setRowCount(0)
         for e in shown:
             text, color = _balance_text(e.balance)
-            _row(self.list, [e.name + ("" if e.active else " (ayrıldı)"), e.role, text], {2: color})
+            role = " · ".join(x for x in (e.role, e.wage_text) if x)
+            _row(self.list, [e.name + ("" if e.active else " (ayrıldı)"), role, text], {2: color})
         idx = next((i for i, e in enumerate(shown) if e.id == selected), -1)
         if idx >= 0:
             self.list.selectRow(idx)
@@ -327,8 +524,8 @@ class PersonnelPage(Page):
             self.ledger_info.clear()
             return
         self.emp_title.setText(e.name)
-        info = [x for x in (e.role, e.phone, f"Maaş: {format_amount(e.monthly_salary)}" if e.monthly_salary else "")
-                if x]
+        info = [x for x in (e.role, e.phone, e.wage_text,
+                            f"Bu ay {self._month_days} gün çalıştı" if e.is_daily else "") if x]
         self.emp_info.setText("  ·  ".join(info))
         _, color = _balance_text(e.balance)
         self.balance_lbl.setText(balance_sentence(e.name, e.balance))
@@ -375,6 +572,24 @@ class PersonnelPage(Page):
             emp = dlg.result_employee
             run_async(lambda: self.ctx.employees.update(emp), lambda _: self._done("Personel güncellendi."),
                       lambda err: show_error(self, "Güncellenemedi", err), owner=self)
+
+    def _attendance(self):
+        if not getattr(self, "_methods", None):
+            show_error(self, "Ödeme yöntemi yok", "Ayarlar'dan en az bir aktif ödeme yöntemi ekleyin.")
+            return
+        today = date.today()
+
+        def open_dialog(data):
+            emps, worked = data
+            daily = [e for e in emps if e.active and e.is_daily]
+            if not daily:
+                show_error(self, "Günlükçü personel yok",
+                           "Personeli düzenleyip çalışma şeklini “Günlük ücret” olarak ayarlayın.")
+                return
+            if AttendanceDialog(self, self.ctx, daily, self._methods, worked, today).exec():
+                self._done("Yoklama kaydedildi.")
+        run_async(lambda: (self.ctx.employees.employees(include_inactive=False), self.ctx.employees.worked_on(today)),
+                  open_dialog, lambda e: show_error(self, "Yoklama açılamadı", e), owner=self)
 
     def _add_entry(self, kind: EmployeeEntryKind):
         e = self._current()

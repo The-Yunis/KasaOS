@@ -240,7 +240,8 @@ def close_cash_session(c, session_id: int, counted: int, expected: int, note: st
 # --- employees -------------------------------------------------------------------------
 
 def _employee(r) -> Employee:
-    return Employee(r["id"], r["name"], r["role"], r["phone"], r["monthly_salary"], r["note"], bool(r["active"]))
+    return Employee(r["id"], r["name"], r["role"], r["phone"], r["monthly_salary"], r["note"], bool(r["active"]),
+                    r["pay_type"], r["daily_wage"])
 
 
 def list_employees(c, include_inactive: bool = False) -> list[Employee]:
@@ -255,13 +256,27 @@ def get_employee(c, employee_id: int) -> Employee | None:
 
 def insert_employee(c, e: Employee) -> int:
     return c.execute(
-        "INSERT INTO employees(name, role, phone, monthly_salary, note, active, created_at) VALUES (?,?,?,?,?,?,?)",
-        (e.name, e.role, e.phone, e.monthly_salary, e.note, int(e.active), utc_now())).lastrowid
+        "INSERT INTO employees(name, role, phone, monthly_salary, note, active, pay_type, daily_wage, created_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?)",
+        (e.name, e.role, e.phone, e.monthly_salary, e.note, int(e.active), e.pay_type, e.daily_wage,
+         utc_now())).lastrowid
 
 
 def update_employee(c, e: Employee) -> None:
-    c.execute("UPDATE employees SET name=?, role=?, phone=?, monthly_salary=?, note=?, active=? WHERE id=?",
-              (e.name, e.role, e.phone, e.monthly_salary, e.note, int(e.active), e.id))
+    c.execute("UPDATE employees SET name=?, role=?, phone=?, monthly_salary=?, note=?, active=?, pay_type=?, "
+              "daily_wage=? WHERE id=?",
+              (e.name, e.role, e.phone, e.monthly_salary, e.note, int(e.active), e.pay_type, e.daily_wage, e.id))
+
+
+def worked_employee_ids(c, day: date) -> set[int]:
+    return {r[0] for r in c.execute("SELECT employee_id FROM employee_entries WHERE occurred_on=? AND work_day=1 "
+                                    "AND deleted_at IS NULL", (day.isoformat(),))}
+
+
+def worked_days(c, employee_id: int, date_from: date, date_to: date) -> int:
+    return c.execute("SELECT count(*) FROM employee_entries WHERE employee_id=? AND work_day=1 AND deleted_at IS NULL "
+                     "AND occurred_on BETWEEN ? AND ?",
+                     (employee_id, date_from.isoformat(), date_to.isoformat())).fetchone()[0]
 
 
 def employee_balances(c) -> dict[int, int]:
@@ -273,7 +288,7 @@ def employee_balances(c) -> dict[int, int]:
 def _entry(r) -> EmployeeEntry:
     return EmployeeEntry(r["id"], r["employee_id"], EmployeeEntryKind(r["kind"]), r["amount"],
                          date.fromisoformat(r["occurred_on"]), r["description"], r["transaction_id"],
-                         r["method_name"] or "", r["created_at"])
+                         r["method_name"] or "", r["created_at"], bool(r["work_day"]))
 
 
 _ENTRY_SELECT = """SELECT e.*, pm.name AS method_name FROM employee_entries e
@@ -294,9 +309,9 @@ def get_employee_entry(c, entry_id: str) -> EmployeeEntry | None:
 
 def insert_employee_entry(c, e: EmployeeEntry) -> None:
     c.execute("""INSERT INTO employee_entries(id, employee_id, kind, amount, occurred_on, description, transaction_id,
-                 created_at) VALUES (?,?,?,?,?,?,?,?)""",
+                 created_at, work_day) VALUES (?,?,?,?,?,?,?,?,?)""",
               (e.id, e.employee_id, e.kind.value, e.amount, e.occurred_on.isoformat(), e.description,
-               e.transaction_id, e.created_at))
+               e.transaction_id, e.created_at, int(e.work_day)))
 
 
 def soft_delete_employee_entry(c, entry_id: str) -> None:

@@ -259,3 +259,23 @@ def test_personnel_page_and_payment_dialog(qapp, ctx, h):
     assert ctx.reports.summary(date.today(), date.today()).expense == 1_250_00
     w._closing = True
     w.close()
+
+
+def test_attendance_dialog(qapp, ctx, h):
+    from kasaos.domain.entities import Employee
+    from kasaos.ui.pages.personnel import AttendanceDialog
+    a = ctx.employees.add(Employee(0, "Ali", pay_type="daily", daily_wage=1_200_00))
+    b = ctx.employees.add(Employee(0, "Veli", pay_type="daily", daily_wage=1_000_00))
+    dlg = AttendanceDialog(None, ctx, [a, b], ctx.catalog.payment_methods(), set(), date.today())
+    dlg.checks[0].setChecked(True)
+    dlg.paid[0].setChecked(True)
+    dlg.checks[1].setChecked(True)
+    dlg.wages[1].setText("1.100")
+    assert "2 kişi" in dlg.total.text() and "2.300,00" in dlg.total.text()
+    dlg._save()
+    assert wait_until(lambda: dlg.result() == 1)
+    assert ctx.employees.get(a.id).balance == 0
+    assert ctx.employees.get(b.id).balance == 1_100_00
+    again = AttendanceDialog(None, ctx, [a, b], ctx.catalog.payment_methods(), ctx.employees.worked_on(date.today()),
+                             date.today())
+    assert not again.checks[0].isEnabled() and not again.checks[1].isEnabled()  # already recorded today

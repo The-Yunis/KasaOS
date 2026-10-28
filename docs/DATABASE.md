@@ -15,7 +15,7 @@ All amounts are **integer kuruş** (`amount INTEGER CHECK (amount > 0)`). User i
 float is used for any stored value or total. Direction comes from `kind` and `is_refund`, never from
 a negative amount.
 
-## Schema (version 2)
+## Schema (version 3)
 
 | Table | Notes |
 |---|---|
@@ -27,8 +27,8 @@ a negative amount.
 | `cash_sessions` | one per account and business date; stores expected and counted closing amounts |
 | `audit_events` | create / update (before + after) / delete per entity |
 | `settings` | key/value |
-| `employees` *(v2)* | staff; `active=0` keeps history after someone leaves |
-| `employee_entries` *(v2)* | accrual / payment / repayment / deduction; `transaction_id` links cash-moving entries to their `transactions` row; soft delete |
+| `employees` *(v2)* | staff; `active=0` keeps history after someone leaves; *(v3)* `pay_type` monthly/daily, `daily_wage` |
+| `employee_entries` *(v2)* | accrual / payment / repayment / deduction; `transaction_id` links cash-moving entries to their `transactions` row; soft delete; *(v3)* `work_day=1` marks a Günlük Yoklama accrual (one per employee per day, enforced in the service) |
 
 Personnel balance = Σ accrual + Σ repayment − Σ payment − Σ deduction (> 0: business owes the employee).
 Payments are stored as `Personel` expenses and repayments as expense refunds, created in the same DB

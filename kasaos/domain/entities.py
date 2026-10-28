@@ -149,7 +149,20 @@ class Employee:
     monthly_salary: int = 0  # kuruş, informational / default accrual amount
     note: str = ""
     active: bool = True
-    balance: int = 0         # filled by the service: >0 business owes, <0 employee owes
+    pay_type: str = "monthly"  # "monthly" | "daily"
+    daily_wage: int = 0        # kuruş, used by Günlük Yoklama
+    balance: int = 0           # filled by the service: >0 business owes, <0 employee owes
+
+    @property
+    def is_daily(self) -> bool:
+        return self.pay_type == "daily"
+
+    @property
+    def wage_text(self) -> str:
+        from kasaos.domain.money import format_amount
+        if self.is_daily:
+            return f"Günlük {format_amount(self.daily_wage)}" if self.daily_wage else "Günlük ücretli"
+        return f"Aylık {format_amount(self.monthly_salary)}" if self.monthly_salary else ""
 
 
 @dataclass
@@ -163,6 +176,7 @@ class EmployeeEntry:
     transaction_id: str | None = None
     payment_method_name: str = ""
     created_at: str = ""
+    work_day: bool = False
 
     @property
     def signed(self) -> int:

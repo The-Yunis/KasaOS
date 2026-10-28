@@ -113,3 +113,74 @@ def test_summary_and_inactive(ctx, h, emp):
     ctx.employees.update(other)
     assert ctx.employees.summary().active_count == 1
     assert ctx.employees.get(other.id).balance == -300_00  # history kept after leaving
+
+
+# --- günlük ücret / yoklama -----------------------------------------------------------
+from kasaos.services.employee_service import AttendanceRow  # noqa: E402
+
+
+@pytest.fixture
+def daily(ctx):
+    a = ctx.employees.add(Employee(0, "Ali", "Garson", pay_type="daily", daily_wage=1_200_00))
+    b = ctx.employees.add(Employee(0, "Veli", "Komi", pay_type="daily", daily_wage=1_000_00))
+    return a, b
+
+
+def test_attendance_accrues_without_cash(ctx, h, daily):
+    a, b = daily
+    assert ctx.employees.record_attendance(T, [AttendanceRow(a.id, 1_200_00), AttendanceRow(b.id, 1_000_00)],
+                                           None) == 2
+    assert ctx.employees.get(a.id).balance == 1_200_00
+    assert ctx.employees.get(b.id).balance == 1_000_00
+    assert ctx.cash.balance(h.accounts["cash"].id) == 0
+    assert ctx.employees.worked_on(T) == {a.id, b.id}
+    assert ctx.employees.worked_days(a.id, T.replace(day=1), T) == 1
+
+
+def test_attendance_paid_same_day_nets_to_zero_and_hits_cash(ctx, h, daily):
+    a, b = daily
+    ctx.employees.record_attendance(T, [AttendanceRow(a.id, 1_200_00, paid=True), AttendanceRow(b.id, 1_000_00)],
+                                    h.methods["Nakit"].id)
+    assert ctx.employees.get(a.id).balance == 0
+    assert ctx.employees.get(b.id).balance == 1_000_00
+    assert ctx.cash.balance(h.accounts["cash"].id) == -1_200_00
+    assert ctx.reports.summary(T, T).expense == 1_200_00
+
+
+def test_attendance_same_day_twice_rejected_atomically(ctx, h, daily):
+    a, b = daily
+    ctx.employees.record_attendance(T, [AttendanceRow(a.id, 1_200_00)], None)
+    with pytest.raises(ValidationError, match="zaten"):
+        ctx.employees.record_attendance(T, [AttendanceRow(b.id, 1_000_00, paid=True), AttendanceRow(a.id, 1_200_00)],
+                                        h.methods["Nakit"].id)
+    # nothing from the failed sheet was saved (b, and b's cash payment)
+    assert ctx.employees.get(b.id).balance == 0
+    assert ctx.cash.balance(h.accounts["cash"].id) == 0
+
+
+def test_attendance_validation(ctx, daily):
+    a, _ = daily
+    with pytest.raises(ValidationError):
+        ctx.employees.record_attendance(T, [], None)
+    with pytest.raises(ValidationError):
+        ctx.employees.record_attendance(T, [AttendanceRow(a.id, 1_200_00, paid=True)], None)
+    with pytest.raises(ValidationError):
+        ctx.employees.add(Employee(0, "X", pay_type="weekly"))
+
+
+def test_deleting_attendance_frees_the_day(ctx, daily):
+    a, _ = daily
+    ctx.employees.record_attendance(T, [AttendanceRow(a.id, 1_200_00)], None)
+    ctx.employees.delete_entry(ctx.employees.entries(a.id)[0].id)
+    assert ctx.employees.worked_on(T) == set()
+    ctx.employees.record_attendance(T, [AttendanceRow(a.id, 1_200_00)], None)
+
+
+def test_week_of_work_then_payout(ctx, h, daily):
+    from datetime import timedelta
+    a, _ = daily
+    for i in range(6):
+        ctx.employees.record_attendance(T - timedelta(days=i), [AttendanceRow(a.id, 1_200_00)], None)
+    ctx.employees.add_entry(a.id, K.PAYMENT, 5_000_00, T, "Haftalık ödeme", h.methods["Nakit"].id)
+    assert ctx.employees.get(a.id).balance == 7_200_00 - 5_000_00
+    assert ctx.employees.worked_days(a.id, T - timedelta(days=30), T) == 6

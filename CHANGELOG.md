@@ -9,6 +9,10 @@ All notable changes to KasaOS. Versions follow semantic versioning.
 - Her personel için bakiye: kime ne kadar borçlusunuz, kim size ne kadar borçlu
 - Hareketler: hak ediş (maaş, prim, mesai), ödeme / avans, tahsilat, kesinti
 - Ödeme ve tahsilatlar kasaya ve "Personel" giderine otomatik işlenir
+- Günlük ücretli (yevmiyeli) personel: çalışma şekli ve günlük ücret
+- **Günlük Yoklama:** o gün çalışanları işaretleyip yevmiyeleri tek seferde yazma; aynı gün
+  ödenenler için "Ödendi" ile ödeme de kasadan düşülür; aynı güne iki kez yevmiye yazılamaz
+- Personel detayında "bu ay kaç gün çalıştı"
 - Veritabanı otomatik güncellenir (öncesinde yedek alınır); gerekirse 1.0.0'a geri dönülebilir
 
 ## [1.0.0] — 2026-10-28

@@ -204,7 +204,7 @@ def test_csv_export(ctx, h, tmp_path):
     assert "1.250,50" in text and "Gelir" in text
 
 
-def test_upgrade_real_v1_database_to_v2(paths):
+def test_upgrade_real_v1_database_to_latest(paths):
     """A 1.0.0 database with data opens in 1.1.0: backup first, data kept, personnel tables added."""
     from kasaos.infrastructure.database.migrations import MIGRATIONS as ALL
     db = Database(paths.database)
@@ -218,11 +218,32 @@ def test_upgrade_real_v1_database_to_v2(paths):
     ctx = AppContext.build(paths)
     ctx.open_database()
     try:
-        assert ctx.schema_version == 2
+        assert ctx.schema_version == S
         assert ctx.transactions.get("old").amount == 5000
-        assert any(b.reason == "pre-migration-v1-to-v2" and b.schema_version == 1 for b in ctx.backups.list())
+        assert any(b.reason == f"pre-migration-v1-to-v{S}" and b.schema_version == 1 for b in ctx.backups.list())
         assert ctx.employees.employees() == []
         # rollback safety: the 1.0.0 app (schema 1) may still open the migrated DB
-        assert migrate(ctx.db, 1, None) == 2
+        assert migrate(ctx.db, 1, None) == S
+    finally:
+        ctx.shutdown()
+
+
+def test_upgrade_v2_with_personnel_to_v3_keeps_balances(paths):
+    """The 1.1.0-dev database on this machine (schema 2, with staff) must upgrade cleanly."""
+    from kasaos.infrastructure.database.migrations import MIGRATIONS as ALL
+    db = Database(paths.database)
+    db.open()
+    migrate(db, 2, None, [m for m in ALL if m.version <= 2])
+    with db.transaction() as c:
+        c.execute("INSERT INTO employees(id, name, created_at) VALUES (1, 'Ali', 'x')")
+        c.execute("INSERT INTO employee_entries(id, employee_id, kind, amount, occurred_on, created_at) "
+                  "VALUES ('e1', 1, 'accrual', 90000, '2026-10-01', 'x')")
+    db.close()
+    ctx = AppContext.build(paths)
+    ctx.open_database()
+    try:
+        emp = ctx.employees.get(1)
+        assert emp.balance == 90000 and emp.pay_type == "monthly" and emp.daily_wage == 0
+        assert migrate(ctx.db, 1, None) == S  # still rollback-safe
     finally:
         ctx.shutdown()
