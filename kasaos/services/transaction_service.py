@@ -109,6 +109,9 @@ class TransactionService:
             old = repo.get_transaction(c, tx_id)
             if old is None:
                 raise NotFoundError("İşlem bulunamadı veya silinmiş.")
+            if repo.entry_for_transaction(c, tx_id) is not None:
+                raise ValidationError("Bu kayıt bir personel hareketine bağlı. Değiştirmek için Personel sayfasından "
+                                      "hareketi silip yeniden girin.")
             d = self._validate(c, draft)
             new = Transaction(
                 id=tx_id, kind=d.kind, occurred_on=d.occurred_on,
@@ -130,6 +133,10 @@ class TransactionService:
                 raise NotFoundError("İşlem bulunamadı veya zaten silinmiş.")
             repo.soft_delete_transaction(c, tx_id)
             repo.add_audit(c, "transaction", tx_id, "delete", {"before": _audit_view(old)})
+            linked = repo.entry_for_transaction(c, tx_id)
+            if linked is not None:  # keep the personnel balance consistent with cash
+                repo.soft_delete_employee_entry(c, linked.id)
+                repo.add_audit(c, "employee_entry", linked.id, "delete", {"via": "transaction"})
         log.info("Transaction deleted id=%s", tx_id)
 
     # -- queries -----------------------------------------------------------------

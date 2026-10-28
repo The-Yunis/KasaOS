@@ -21,6 +21,7 @@ from kasaos.ui.pages.about import AboutPage
 from kasaos.ui.pages.cash import CashPage
 from kasaos.ui.pages.categories import CategoriesPage
 from kasaos.ui.pages.dashboard import DashboardPage
+from kasaos.ui.pages.personnel import PersonnelPage
 from kasaos.ui.pages.reports import ReportsPage
 from kasaos.ui.pages.settings import SettingsPage
 from kasaos.ui.pages.transactions import TransactionsPage
@@ -35,6 +36,7 @@ NAV = [
     ("income", "Gelir İşlemleri", "income"),
     ("expense", "Gider İşlemleri", "expense"),
     ("cash", "Kasa Yönetimi", "cash"),
+    ("personnel", "Personel", "personnel"),
     ("history", "İşlem Geçmişi", "history"),
     ("reports", "Raporlar", "reports"),
     ("categories", "Kategoriler", "categories"),
@@ -68,6 +70,7 @@ class MainWindow(QMainWindow):
         self.pages = {
             "dashboard": DashboardPage(self), "income": TransactionsPage(self, "income"),
             "expense": TransactionsPage(self, "expense"), "cash": CashPage(self),
+            "personnel": PersonnelPage(self),
             "history": TransactionsPage(self, "history"), "reports": ReportsPage(self),
             "categories": CategoriesPage(self), "settings": SettingsPage(self), "about": AboutPage(self),
         }

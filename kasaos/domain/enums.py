@@ -35,6 +35,27 @@ class AccountKind(StrEnum):
         return {"cash": "Nakit Kasa", "bank": "Banka", "pos": "POS / Kart", "other": "Diğer"}[self.value]
 
 
+class EmployeeEntryKind(StrEnum):
+    """Personnel ledger. Balance > 0: the business owes the employee; < 0: the employee owes."""
+    ACCRUAL = "accrual"        # hak ediş (maaş, prim, mesai) — no cash movement
+    PAYMENT = "payment"        # ödeme / avans — cash out, recorded as a "Personel" expense
+    REPAYMENT = "repayment"    # personelden tahsilat — cash in, reduces the "Personel" expense
+    DEDUCTION = "deduction"    # kesinti / personele borç yazma — no cash movement
+
+    @property
+    def label(self) -> str:
+        return {"accrual": "Hak ediş", "payment": "Ödeme / Avans", "repayment": "Tahsilat",
+                "deduction": "Kesinti"}[self.value]
+
+    @property
+    def sign(self) -> int:
+        return 1 if self in (EmployeeEntryKind.ACCRUAL, EmployeeEntryKind.REPAYMENT) else -1
+
+    @property
+    def moves_cash(self) -> bool:
+        return self in (EmployeeEntryKind.PAYMENT, EmployeeEntryKind.REPAYMENT)
+
+
 class CategoryKind(StrEnum):
     INCOME = "income"
     EXPENSE = "expense"

@@ -235,3 +235,27 @@ def test_startup_failure_shows_error_and_keeps_db(qapp, paths):
     assert s.window is None
     assert paths.database.read_bytes().startswith(b"SQLite format 3\x00\x13")
     s.splash.close()
+
+
+def test_personnel_page_and_payment_dialog(qapp, ctx, h):
+    from kasaos.domain.entities import Employee
+    from kasaos.domain.enums import EmployeeEntryKind
+    from kasaos.ui.pages.personnel import EntryDialog
+    w = make_window(ctx)
+    page = w.pages["personnel"]
+    w.navigate("personnel")
+    assert wait_until(lambda: not page._loading)
+    assert page.stack.currentIndex() == 0  # empty state
+    emp = ctx.employees.add(Employee(0, "Ayşe", "Kasiyer"))
+    ctx.employees.add_entry(emp.id, EmployeeEntryKind.ACCRUAL, 1_000_00, date.today())
+    page.refresh()
+    assert wait_until(lambda: not page._loading and page.stack.currentIndex() == 1)
+    assert "borçlusunuz" in page.balance_lbl.text()
+    dlg = EntryDialog(page, ctx, ctx.employees.get(emp.id), EmployeeEntryKind.PAYMENT, ctx.catalog.payment_methods())
+    dlg.amount.setText("1.250")
+    dlg._save()
+    assert wait_until(lambda: dlg.result() == 1)
+    assert ctx.employees.get(emp.id).balance == -250_00
+    assert ctx.reports.summary(date.today(), date.today()).expense == 1_250_00
+    w._closing = True
+    w.close()

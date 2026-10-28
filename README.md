@@ -30,6 +30,7 @@ sürüme döner; verileriniz her durumda korunur.
 - **Hızlı gelir / gider girişi:** klavyeyle çalışır, "Kaydet ve Yeni" ile art arda kayıt girilir, aynı kayıt yanlışlıkla iki kez kaydedilmez
 - **Genel bakış:** günün ve ayın özeti, nakit kasa bakiyesi, kart tahsilatı, 14 günlük grafik
 - **Kasa yönetimi:** gün açılış sayımı, kapanışta beklenen ve sayılan nakit, fark
+- **Personel takibi:** maaş, avans, prim, kesinti; kime ne kadar borçlusunuz, kim size ne kadar borçlu
 - **Transfer, sahip çekişi, sermaye girişi:** gelir veya gider sayılmaz
 - **İşlem geçmişi:** filtreleme, arama, düzenleme, silme, değişiklik geçmişi
 - **Raporlar:** kategori ve ödeme yöntemine göre dağılım, Excel uyumlu CSV
@@ -39,8 +40,8 @@ sürüme döner; verileriniz her durumda korunur.
 | İşlem girişi | Kasa yönetimi |
 |---|---|
 | ![](docs/images/dialog.png) | ![](docs/images/cash.png) |
-| **İşlem geçmişi** | **Raporlar** |
-| ![](docs/images/history.png) | ![](docs/images/reports.png) |
+| **Personel** | **Raporlar** |
+| ![](docs/images/personnel.png) | ![](docs/images/reports.png) |
 
 ---
 

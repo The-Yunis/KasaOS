@@ -130,8 +130,34 @@ def _seed_defaults(c: sqlite3.Connection) -> None:
         c.execute("INSERT INTO categories(name, kind, color, sort) VALUES (?,?,?,?)", (name, "expense", color, i))
 
 
+def _m2_employees(c: sqlite3.Connection) -> None:
+    # Expand-only: new tables, nothing existing changes, so schema-1 apps can still open the DB.
+    c.execute("""CREATE TABLE employees (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT '',
+        phone TEXT NOT NULL DEFAULT '',
+        monthly_salary INTEGER NOT NULL DEFAULT 0 CHECK (monthly_salary >= 0),
+        note TEXT NOT NULL DEFAULT '',
+        active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL)""")
+    c.execute("""CREATE TABLE employee_entries (
+        id TEXT PRIMARY KEY,
+        employee_id INTEGER NOT NULL REFERENCES employees(id),
+        kind TEXT NOT NULL CHECK (kind IN ('accrual','payment','repayment','deduction')),
+        amount INTEGER NOT NULL CHECK (amount > 0),
+        occurred_on TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        transaction_id TEXT REFERENCES transactions(id),
+        created_at TEXT NOT NULL,
+        deleted_at TEXT)""")
+    c.execute("CREATE INDEX ix_emp_entries ON employee_entries(employee_id) WHERE deleted_at IS NULL")
+    c.execute("CREATE INDEX ix_emp_entries_tx ON employee_entries(transaction_id)")
+
+
 MIGRATIONS: list[Migration] = [
     Migration(1, "İlk şema", _m1_initial, compat_floor=1),
+    Migration(2, "Personel takibi", _m2_employees, compat_floor=1),
 ]
 
 

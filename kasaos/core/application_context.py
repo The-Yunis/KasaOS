@@ -11,6 +11,7 @@ from kasaos.infrastructure.database.migrations import migrate
 from kasaos.services.backup_service import BackupService
 from kasaos.services.cash_service import CashService
 from kasaos.services.catalog_service import CatalogService
+from kasaos.services.employee_service import EmployeeService
 from kasaos.services.reporting_service import ReportingService
 from kasaos.services.settings_service import SettingsService
 from kasaos.services.transaction_service import TransactionService
@@ -29,6 +30,7 @@ class AppContext:
     reports: ReportingService
     backups: BackupService
     settings: SettingsService
+    employees: EmployeeService
     schema_version: int = 0
     startup_notes: list[str] = field(default_factory=list)
 
@@ -38,7 +40,7 @@ class AppContext:
         return cls(paths=paths, db=db, transactions=TransactionService(db), catalog=CatalogService(db),
                    cash=CashService(db), reports=ReportingService(db),
                    backups=BackupService(db, paths.backups_dir, paths.quarantine_dir),
-                   settings=SettingsService(db))
+                   settings=SettingsService(db), employees=EmployeeService(db))
 
     def open_database(self) -> None:
         """Open + migrate. Raises DatabaseError subclasses; never deletes data."""

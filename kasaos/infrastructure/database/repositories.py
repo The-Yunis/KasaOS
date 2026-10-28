@@ -7,9 +7,9 @@ import json
 import sqlite3
 from datetime import date, datetime, timezone
 
-from kasaos.domain.entities import (Account, AuditEvent, CashSession, Category, PaymentMethod,
-                                    Transaction, TransactionFilter)
-from kasaos.domain.enums import AccountKind, CategoryKind, TxKind
+from kasaos.domain.entities import (Account, AuditEvent, CashSession, Category, Employee, EmployeeEntry,
+                                    PaymentMethod, Transaction, TransactionFilter)
+from kasaos.domain.enums import AccountKind, CategoryKind, EmployeeEntryKind, TxKind
 
 
 def utc_now() -> str:
@@ -235,6 +235,77 @@ def insert_cash_session(c, account_id: int, business_date: date, opening: int) -
 def close_cash_session(c, session_id: int, counted: int, expected: int, note: str) -> None:
     c.execute("UPDATE cash_sessions SET counted_amount=?, expected_amount=?, closed_at=?, note=? WHERE id=?",
               (counted, expected, utc_now(), note, session_id))
+
+
+# --- employees -------------------------------------------------------------------------
+
+def _employee(r) -> Employee:
+    return Employee(r["id"], r["name"], r["role"], r["phone"], r["monthly_salary"], r["note"], bool(r["active"]))
+
+
+def list_employees(c, include_inactive: bool = False) -> list[Employee]:
+    sql = "SELECT * FROM employees" + ("" if include_inactive else " WHERE active=1") + " ORDER BY active DESC, name"
+    return [_employee(r) for r in c.execute(sql)]
+
+
+def get_employee(c, employee_id: int) -> Employee | None:
+    r = c.execute("SELECT * FROM employees WHERE id=?", (employee_id,)).fetchone()
+    return _employee(r) if r else None
+
+
+def insert_employee(c, e: Employee) -> int:
+    return c.execute(
+        "INSERT INTO employees(name, role, phone, monthly_salary, note, active, created_at) VALUES (?,?,?,?,?,?,?)",
+        (e.name, e.role, e.phone, e.monthly_salary, e.note, int(e.active), utc_now())).lastrowid
+
+
+def update_employee(c, e: Employee) -> None:
+    c.execute("UPDATE employees SET name=?, role=?, phone=?, monthly_salary=?, note=?, active=? WHERE id=?",
+              (e.name, e.role, e.phone, e.monthly_salary, e.note, int(e.active), e.id))
+
+
+def employee_balances(c) -> dict[int, int]:
+    rows = c.execute("""SELECT employee_id, sum(CASE WHEN kind IN ('accrual','repayment') THEN amount ELSE -amount END)
+                        AS bal FROM employee_entries WHERE deleted_at IS NULL GROUP BY employee_id""")
+    return {r["employee_id"]: r["bal"] for r in rows}
+
+
+def _entry(r) -> EmployeeEntry:
+    return EmployeeEntry(r["id"], r["employee_id"], EmployeeEntryKind(r["kind"]), r["amount"],
+                         date.fromisoformat(r["occurred_on"]), r["description"], r["transaction_id"],
+                         r["method_name"] or "", r["created_at"])
+
+
+_ENTRY_SELECT = """SELECT e.*, pm.name AS method_name FROM employee_entries e
+LEFT JOIN transactions t ON t.id = e.transaction_id
+LEFT JOIN payment_methods pm ON pm.id = t.payment_method_id"""
+
+
+def list_employee_entries(c, employee_id: int) -> list[EmployeeEntry]:
+    return [_entry(r) for r in c.execute(
+        _ENTRY_SELECT + " WHERE e.employee_id=? AND e.deleted_at IS NULL ORDER BY e.occurred_on DESC, e.created_at DESC",
+        (employee_id,))]
+
+
+def get_employee_entry(c, entry_id: str) -> EmployeeEntry | None:
+    r = c.execute(_ENTRY_SELECT + " WHERE e.id=? AND e.deleted_at IS NULL", (entry_id,)).fetchone()
+    return _entry(r) if r else None
+
+
+def insert_employee_entry(c, e: EmployeeEntry) -> None:
+    c.execute("""INSERT INTO employee_entries(id, employee_id, kind, amount, occurred_on, description, transaction_id,
+                 created_at) VALUES (?,?,?,?,?,?,?,?)""",
+              (e.id, e.employee_id, e.kind.value, e.amount, e.occurred_on.isoformat(), e.description,
+               e.transaction_id, e.created_at))
+
+
+def soft_delete_employee_entry(c, entry_id: str) -> None:
+    c.execute("UPDATE employee_entries SET deleted_at=? WHERE id=? AND deleted_at IS NULL", (utc_now(), entry_id))
+
+
+def entry_for_transaction(c, tx_id: str) -> EmployeeEntry | None:
+    r = c.execute(_ENTRY_SELECT + " WHERE e.transaction_id=? AND e.deleted_at IS NULL", (tx_id,)).fetchone()
+    return _entry(r) if r else None
 
 
 # --- audit / settings ------------------------------------------------------------------

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date
 
-from kasaos.domain.enums import AccountKind, CategoryKind, TxKind
+from kasaos.domain.enums import AccountKind, CategoryKind, EmployeeEntryKind, TxKind
 
 
 @dataclass
@@ -138,6 +138,35 @@ class CategoryTotal:
     color: str
     amount: int
     count: int = 0
+
+
+@dataclass
+class Employee:
+    id: int
+    name: str
+    role: str = ""
+    phone: str = ""
+    monthly_salary: int = 0  # kuruş, informational / default accrual amount
+    note: str = ""
+    active: bool = True
+    balance: int = 0         # filled by the service: >0 business owes, <0 employee owes
+
+
+@dataclass
+class EmployeeEntry:
+    id: str
+    employee_id: int
+    kind: "EmployeeEntryKind"
+    amount: int
+    occurred_on: date
+    description: str = ""
+    transaction_id: str | None = None
+    payment_method_name: str = ""
+    created_at: str = ""
+
+    @property
+    def signed(self) -> int:
+        return self.kind.sign * self.amount
 
 
 @dataclass
