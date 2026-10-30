@@ -2,6 +2,11 @@
 
 All notable changes to KasaOS. Versions follow semantic versioning.
 
+## [1.1.2] — 2026-10-30
+
+- Bazı bilgisayarlarda açılışta görülen DLL hatası için program olgun bir Python sürümüyle
+  (3.13) yeniden paketlendi
+
 ## [1.1.1] — 2026-10-28
 
 - Personel listesinde "Durum" sütunu artık kesilmeden görünüyor

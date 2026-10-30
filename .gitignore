@@ -17,3 +17,6 @@ __pycache__/
 *.key
 .kasaos-signing/
 .env
+
+# local build environment
+.venv*/
